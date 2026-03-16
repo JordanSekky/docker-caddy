@@ -1,0 +1,51 @@
+name: "Test Suite"
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo test --all-features
+
+  # Check formatting with rustfmt
+  formatting:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Ensure rustfmt is installed and setup problem matcher
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - name: Rustfmt Check
+        uses: actions-rust-lang/rustfmt@v1
+  
+  release:
+    name: cargo build --release
+    needs: [formatting, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install musl-gcc
+        run: sudo apt install -y musl-tools musl-dev
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-unknown-linux-musl
+      - run: cargo build --release --target=x86_64-unknown-linux-musl
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo release_tag=$(./target/x86_64-unknown-linux-musl/release/route53_dd --version | cut -d' ' -f2) >> "$GITHUB_OUTPUT"
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          files: ./target/x86_64-unknown-linux-musl/release/route53_dd
+
